@@ -1,0 +1,25 @@
+# Maven / Java build output
+target/
+*.class
+
+# Eclipse workspace/project metadata
+.metadata/
+.settings/
+.classpath
+.project
+
+# IntelliJ / VS Code, harmless if not used
+.idea/
+.vscode/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+*~
