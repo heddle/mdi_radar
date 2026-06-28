@@ -46,7 +46,7 @@ public class RadarApp extends BaseMDIApplication {
 		EventQueue.invokeLater(() -> {
 			RadarApp app = new RadarApp(PropertyUtils.TITLE, "Radar Visualization Demo",
 					PropertyUtils.FRACTION, 0.8,
-					PropertyUtils.BACKGROUND, Color.darkGray);
+					PropertyUtils.BACKGROUND, Color.gray);
 			app.setVisible(true);
 		});
 	}

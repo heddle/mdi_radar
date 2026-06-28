@@ -13,6 +13,7 @@ import java.awt.Shape;
 import java.awt.event.ActionEvent;
 import java.awt.geom.Point2D;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 import javax.swing.BorderFactory;
@@ -31,6 +32,9 @@ import edu.cnu.mdi.component.CommonBorder;
 import edu.cnu.mdi.container.IContainer;
 import edu.cnu.mdi.graphics.toolbar.BaseToolBar;
 import edu.cnu.mdi.graphics.toolbar.ToolBits;
+import edu.cnu.mdi.hover.HoverEvent;
+import edu.cnu.mdi.hover.HoverInfoWindow;
+import edu.cnu.mdi.item.AItem;
 import edu.cnu.mdi.item.Layer;
 import edu.cnu.mdi.mapping.MapResources;
 import edu.cnu.mdi.mapping.MapView2D;
@@ -47,6 +51,7 @@ import edu.cnu.mdi.ui.fonts.Fonts;
 import edu.cnu.mdi.ui.menu.ViewPopupMenu;
 import edu.cnu.mdi.util.Environment;
 import edu.cnu.mdi.util.PropertyUtils;
+import edu.cnu.mdi.view.AbstractViewInfo;
 import edu.cnu.mdi.view.ContainerFactory;
 
 /**
@@ -77,6 +82,9 @@ public class RadarView extends MapView2D {
 
     /** Whether ETOPO5 shaded elevation/bathymetry should be rendered. */
     private boolean showEtopo5 = false;
+    
+    /** Whether hovering over radar items should show a tooltip. */
+    private boolean enableHovering = true;
 
     /**
      * ETOPO5 elevation loader used both for terrain shading and radar line of
@@ -136,9 +144,13 @@ public class RadarView extends MapView2D {
         // Add the Display ETOPO5 checkbox to the map control panel.
         if (controlPanel != null) {
             controlPanel.addCheckbox("Display ETOPO5", showEtopo5, this::handleEtopo5);
+            controlPanel.addCheckbox("Enable hovering", enableHovering, this::handleHovering);
         }
 
         quickZoomMenu();
+        
+        // no filtering of city labels
+        getCityRenderer().setMaxLabelScalerank(-1);
     }
 
     /**
@@ -365,6 +377,60 @@ public class RadarView extends MapView2D {
                 "Radar Placement Warning",
                 JOptionPane.WARNING_MESSAGE);
     }
+    
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>
+	 * When the user hovers over the map, this method displays a small window with the
+	 * name and ISO code of the country under the cursor, if any. The tooltip is
+	 * shown in the {@link HoverInfoWindow} provided by the {@link MapContainer}.
+	 * </p>
+	 */
+	@Override
+	public void hoverUpdate(HoverEvent he) {
+		
+		// If hovering is disabled, do nothing.
+		if (!enableHovering) {
+			return;
+		}
+
+		Point pp = he.getLocation();
+		HoverInfoWindow win = container.getHoverWindow();
+			
+		if ((win == null) || (pp == null)) {
+			return;
+		}
+		
+		List<RadarItem> radars = getAllRadars();
+		if (radars == null || radars.isEmpty()) {
+			return;
+		}
+		
+		// Check if the hover point is over any radar item.
+		for (RadarItem radar : radars) {
+			if (radar.contains(container, pp)) {
+				RadarParameters params = radar.getParameters();
+				String[] strArray = params.toStringArray();
+				
+				StringBuilder sb = new StringBuilder();
+				for (String str : strArray) {
+					sb.append(str).append("\n");
+				}
+				
+				sb.append(String.format(
+                        "site Lat/Lon %.4f, %.4f\n",
+                        radar.getSiteLatitudeDeg(),
+                        radar.getSiteLongitudeDeg()));
+				
+				sb.append(String.format("boresight azimuth %.1f°", radar.getAzimuth()));
+				
+				win.showMessage(he, sb.toString());
+				return;
+			}
+		}
+	}
+
 
     /**
      * Returns interpolated ETOPO5 elevation at a geographic point.
@@ -397,6 +463,21 @@ public class RadarView extends MapView2D {
         if (showEtopo5) {
             drawEtopo5(g, container);
         }
+    }
+    
+    /**
+     * Get all the radar items.
+     * Assumes all radars are on the radarLayer.
+     * @return list of radar items
+     */
+    public List<RadarItem> getAllRadars() {
+    	ArrayList<RadarItem> radars = new ArrayList<>();
+    	for (AItem item : radarLayer.getAllItems()) {
+    		if (item instanceof RadarItem) {
+    			radars.add((RadarItem)item);
+    		}
+    	}
+    	return radars;
     }
 
     /**
@@ -490,6 +571,12 @@ public class RadarView extends MapView2D {
             g.setColor(oldColor);
         }
     }
+    
+    @Override
+    public AbstractViewInfo getViewInfo() {
+        return new RadarViewInfo(this);
+    }
+
 
     /**
      * Returns the terrain/bathymetry color for an ETOPO5 elevation.
@@ -635,6 +722,18 @@ public class RadarView extends MapView2D {
         showEtopo5 = checkbox.isSelected();
         refresh();
     }
+    
+    /**
+     * Handles the hovering checkbox action.
+     *
+     * @param e checkbox action event
+     */
+    private void handleHovering(ActionEvent e) {
+        JCheckBox checkbox = (JCheckBox) e.getSource();
+        enableHovering = checkbox.isSelected();
+        refresh();
+    }
+
 
     /**
      * Returns the default property list used to construct this view.
@@ -674,7 +773,7 @@ public class RadarView extends MapView2D {
         private static final int SWATCH_H = 8;
 
         /** Horizontal gap between legend entries. */
-        private static final int GAP = 5;
+        private static final int GAP = 3;
 
         /** Vertical gap between swatches and labels. */
         private static final int ROW_GAP = 3;
@@ -721,6 +820,16 @@ public class RadarView extends MapView2D {
             int y = 3;
 
             int count = Math.min(base.length, colors.length);
+            
+          //get the biggest width needed
+            int maxWid = SWATCH_W;
+            for (int i = 0; i < count; i++) {
+                String label = altitudeLabel(base[i] * scale);
+                maxWid = Math.max(maxWid, fm.stringWidth(label));          	
+            }
+            maxWid += GAP;
+            
+            
             for (int i = 0; i < count; i++) {
                 g.setColor(colors[i]);
                 g.fillRect(x, y, SWATCH_W, SWATCH_H);
@@ -733,7 +842,7 @@ public class RadarView extends MapView2D {
                 g.setColor(Color.BLACK);
                 g.drawString(label, x, labelY);
 
-                x += Math.max(SWATCH_W, fm.stringWidth(label)) + GAP;
+                x += maxWid;
             }
 
             if (base.length > 0) {

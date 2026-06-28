@@ -75,7 +75,6 @@ import edu.cnu.mdi.radar.radar.RadarParameters;
  * their range and fan width come from {@link RadarParameters}.
  * </p>
  */
-@SuppressWarnings("serial")
 public class RadarItem extends AItem {
 
     // ---------------------------------------------------------------------
@@ -117,26 +116,28 @@ public class RadarItem extends AItem {
             10_000.0
     };
 
-    /** Alpha value used for colored target-altitude rays. */
-    private static final int TARGET_ALPHA = 128;
+    /** Alpha for colored target-altitude rays. ~63% keeps bands readable
+     *  across sea/land without fully hiding terrain. Tune to taste (128–180). */
+    private static final int TARGET_ALPHA = 160;
 
     /**
-     * Colors corresponding to {@link #BASE_TARGET_ALTITUDES_M}.
+     * Colors corresponding to {@link #BASE_TARGET_ALTITUDES_M}, low → high.
      *
      * <p>
-     * The colors progress from low-altitude visibility to high-altitude
-     * visibility. A point requiring more than the highest configured altitude is
-     * drawn using {@link #MASKED_COLOR}.
+     * A clipped {@code magma}-style violet→magenta→coral ramp. Every hue is
+     * absent from typical ETOPO terrain (blues, greens, tans), so bands stay
+     * identifiable over both land and sea, and lightness increases monotonically
+     * with altitude. A point requiring more than the highest configured altitude
+     * is drawn using {@link #MASKED_COLOR}.
      * </p>
      */
     private static final Color[] TARGET_ALTITUDE_COLORS = {
-            new Color(0, 130, 0, TARGET_ALPHA),       // near-ground / surface
-            new Color(70, 170, 60, TARGET_ALPHA),     // low
-            new Color(230, 190, 40, TARGET_ALPHA),    // medium
-            new Color(220, 110, 40, TARGET_ALPHA),    // high
-            new Color(180, 40, 160, TARGET_ALPHA)     // very high
+            new Color( 80,  35, 120, TARGET_ALPHA),  // near-ground / surface
+            new Color(140,  45, 135, TARGET_ALPHA),  // low
+            new Color(195,  55, 120, TARGET_ALPHA),  // medium
+            new Color(232,  85, 100, TARGET_ALPHA),  // high
+            new Color(250, 135,  95, TARGET_ALPHA)   // very high
     };
-
     /** Color used when none of the configured target altitudes can see a point. */
     private static final Color MASKED_COLOR = new Color(40, 40, 40, 120);
 
@@ -210,6 +211,15 @@ public class RadarItem extends AItem {
 
         setDisplayName(parameters.shortName());
     }
+    
+    /**
+	 * Returns the radar parameters for this item.
+	 *
+	 * @return radar parameters
+	 */
+    public RadarParameters getParameters() {
+		return parameters;
+	}
 
     // ---------------------------------------------------------------------
     // Drawing
@@ -368,6 +378,13 @@ public class RadarItem extends AItem {
      * the segment using the configured altitude bands.
      * </p>
      *
+     * <p>
+     * The ray is drawn in projected screen space, but the continuity test is done
+     * in geographic space. If two consecutive samples cross a projection seam, the
+     * screen line is deliberately broken so a short geographic segment is not drawn
+     * as a long streak across the map.
+     * </p>
+     *
      * @param g2              graphics context
      * @param container       map container
      * @param mapView         owning map view
@@ -391,14 +408,17 @@ public class RadarItem extends AItem {
             return;
         }
 
+        IMapProjection projection = mapView.getProjection();
+
+        Point2D.Double prevLatLon = new Point2D.Double(siteLatLon.x, siteLatLon.y);
+        Point2D.Double sampleLatLon = new Point2D.Double();
+
         /*
          * The minimum vertical angle the beam must clear so far. This begins at
          * the radar's own minimum elevation angle and only increases when terrain
          * produces a larger required elevation.
          */
         double blockingAngleRad = minElevationRad;
-
-        Point2D.Double sampleLatLon = new Point2D.Double();
 
         for (double rangeM = RANGE_STEP_M; rangeM <= maxRangeM; rangeM += RANGE_STEP_M) {
             Geodesy.destination(
@@ -408,28 +428,29 @@ public class RadarItem extends AItem {
                     rangeM,
                     sampleLatLon);
 
+            /*
+             * Projection seam crossing: do not connect the previous projected point
+             * to this one. The geographic points are neighbors along the ray, but
+             * their projected x positions may be on opposite sides of the map.
+             */
+            boolean seamBreak = projection.crossesSeam(prevLatLon.x, sampleLatLon.x);
+
             double latDeg = Math.toDegrees(sampleLatLon.y);
             double lonDeg = Math.toDegrees(sampleLatLon.x);
 
             double terrainM = mapView.getElevation(latDeg, lonDeg);
             if (!Double.isFinite(terrainM)) {
                 prevPoint = null;
+                prevLatLon.setLocation(sampleLatLon.x, sampleLatLon.y);
                 continue;
             }
 
             /*
-             * Critical correction:
-             *
-             * ETOPO elevations below sea level are ocean depth, not an
-             * obstruction height. For LOS, water contributes a surface height of
-             * 0 m MSL. Land elevations are used normally.
+             * ETOPO elevations below sea level are ocean depth, not an obstruction
+             * height. For LOS, water contributes a surface height of 0 m MSL.
              */
             double surfaceM = losSurfaceHeightM(terrainM);
 
-            /*
-             * Terrain itself may raise the blocking angle. Over open water this
-             * reduces to the sea-surface curvature/refraction calculation.
-             */
             double terrainAngleRad = Geodesy.elevationAngle(
                     antennaMslM,
                     surfaceM,
@@ -437,19 +458,11 @@ public class RadarItem extends AItem {
 
             blockingAngleRad = Math.max(blockingAngleRad, terrainAngleRad);
 
-            /*
-             * Height MSL required at this range to clear the current blocker.
-             */
             double requiredTargetMslM = Geodesy.targetHeightForElevationAngle(
                     antennaMslM,
                     rangeM,
                     blockingAngleRad);
 
-            /*
-             * Convert required target height to AGL at the sampled surface. Over
-             * water, "AGL" is effectively height above sea surface because
-             * surfaceM has been clamped to 0 m MSL.
-             */
             double requiredTargetAglM = Math.max(0.0, requiredTargetMslM - surfaceM);
 
             Color segmentColor = colorForRequiredTargetAgl(
@@ -459,18 +472,20 @@ public class RadarItem extends AItem {
             Point2D.Double xy = projectLatLon(container, sampleLatLon);
             if (xy == null) {
                 prevPoint = null;
+                prevLatLon.setLocation(sampleLatLon.x, sampleLatLon.y);
                 continue;
             }
 
             Point p = new Point();
             container.worldToLocal(p, xy);
 
-            if (prevPoint != null) {
+            if (!seamBreak && prevPoint != null) {
                 g2.setColor(segmentColor);
                 g2.drawLine(prevPoint.x, prevPoint.y, p.x, p.y);
             }
 
             prevPoint = p;
+            prevLatLon.setLocation(sampleLatLon.x, sampleLatLon.y);
         }
     }
 
@@ -1106,7 +1121,7 @@ public class RadarItem extends AItem {
                     feedbackStrings);
 
             addWithColor(
-                    String.format("boresight azimuth %.1f deg", getAzimuth()),
+                    String.format("boresight azimuth %.1f°", getAzimuth()),
                     feedbackStrings);
         }
     }
