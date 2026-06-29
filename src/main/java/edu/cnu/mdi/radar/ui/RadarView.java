@@ -320,6 +320,38 @@ public class RadarView extends MapView2D {
 
         return new RadarButtonPalette(4, buttons);
     }
+    
+    /**
+     * Tests whether a radar with the given parameters may be placed at a screen point.
+     *
+     * <p>
+     * Ground-based radars must be placed on land. Ship-based radars must be placed
+     * on water. The screen point is interpreted in this view's map container.
+     * </p>
+     *
+     * @param parameters radar parameters
+     * @param pp screen point to test
+     * @param showWarning if {@code true}, show a warning dialog on invalid placement
+     * @return {@code true} if the placement is allowed
+     */
+    public boolean isRadarPlacementAllowed(RadarParameters parameters,
+                                           Point pp,
+                                           boolean showWarning) {
+        if (parameters == null || pp == null) {
+            return false;
+        }
+
+        boolean onLand = this.onLand(pp, getIContainer());
+
+        boolean ok = !((parameters.basing() == RadarBasing.GROUND && !onLand)
+                || (parameters.basing() == RadarBasing.SHIP && onLand));
+
+        if (!ok && showWarning) {
+            warning(parameters);
+        }
+
+        return ok;
+    }
 
     /**
      * Attempts to place a radar on the map at the specified screen point.
@@ -334,14 +366,12 @@ public class RadarView extends MapView2D {
      * @return {@code true} if the radar was placed; {@code false} otherwise
      */
     public boolean tryPlaceRadar(RadarParameters parameters, Point pp) {
+
         if (parameters == null || pp == null) {
             return false;
         }
 
-        boolean onLand = this.onLand(pp, getIContainer());
-        if ((parameters.basing() == RadarBasing.GROUND && !onLand)
-                || (parameters.basing() == RadarBasing.SHIP && onLand)) {
-            warning(parameters);
+        if (!isRadarPlacementAllowed(parameters, pp, true)) {
             return false;
         }
 
@@ -352,7 +382,6 @@ public class RadarView extends MapView2D {
         refresh();
         return true;
     }
-
     /**
      * Displays a warning message for invalid radar placement.
      *

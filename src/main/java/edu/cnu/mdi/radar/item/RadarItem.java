@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import edu.cnu.mdi.container.IContainer;
+import edu.cnu.mdi.graphics.toolbar.GestureContext;
 import edu.cnu.mdi.item.AItem;
 import edu.cnu.mdi.item.ItemModification.ModificationType;
 import edu.cnu.mdi.item.Layer;
@@ -24,6 +25,7 @@ import edu.cnu.mdi.mapping.graphics.MapGraphics.ProjectedMapShape;
 import edu.cnu.mdi.mapping.projection.IMapProjection;
 import edu.cnu.mdi.radar.geo.Geodesy;
 import edu.cnu.mdi.radar.radar.RadarParameters;
+import edu.cnu.mdi.radar.ui.RadarView;
 
 /**
  * A map-native radar coverage item.
@@ -98,6 +100,12 @@ public class RadarItem extends AItem {
 
     /** Range step, in metres, used when sampling terrain along LOS rays. */
     private static final double RANGE_STEP_M = 5_000.0;
+    
+    /**
+     * Site location at the start of the current modification, used to restore the
+     * item if a final drag location is rejected.
+     */
+    private Point2D.Double modificationStartSiteLatLon; 
 
     /**
      * Base target altitude thresholds, in metres AGL.
@@ -487,6 +495,82 @@ public class RadarItem extends AItem {
             prevPoint = p;
             prevLatLon.setLocation(sampleLatLon.x, sampleLatLon.y);
         }
+    }
+    
+    /**
+     * Records the starting geographic site before an interactive modification.
+     *
+     * <p>
+     * The stored location is used as a rollback point if the final modified state
+     * is rejected by {@link #acceptModification(GestureContext)}.
+     * </p>
+     */
+    @Override
+    public void startModification() {
+        super.startModification();
+        modificationStartSiteLatLon = new Point2D.Double(siteLatLon.x, siteLatLon.y);
+    }
+    
+    /**
+     * Tests whether the final modified radar state is acceptable.
+     *
+     * <p>
+     * Only drag modifications are constrained here. Rotation is always accepted.
+     * A dragged ground-based radar must end on land, and a dragged ship-based radar
+     * must end on water.
+     * </p>
+     *
+     * @param gc gesture context
+     * @return {@code true} if the modification should be kept
+     */
+    @Override
+    public boolean acceptModification(GestureContext gc) {
+        if (_modification == null) {
+            return true;
+        }
+
+        if (_modification.getType() != ModificationType.DRAG) {
+            return true;
+        }
+
+        IContainer container = _modification.getContainer();
+        if (!(container instanceof MapContainer mapContainer)) {
+            return true;
+        }
+
+        if (!(mapContainer.getView() instanceof RadarView radarView)) {
+            return true;
+        }
+
+        Point fp = getFocusPoint(container);
+        if (fp == null) {
+            return false;
+        }
+
+        return radarView.isRadarPlacementAllowed(parameters, fp, true);
+    }
+
+    /**
+     * Restores the radar site when a drag modification is rejected.
+     *
+     * @param gc gesture context
+     */
+    @Override
+    public void modificationRejected(GestureContext gc) {
+        if (modificationStartSiteLatLon != null) {
+            siteLatLon.x = modificationStartSiteLatLon.x;
+            siteLatLon.y = modificationStartSiteLatLon.y;
+            geometryChanged();
+        }
+    }
+
+    /**
+     * Clears the saved rollback site after the modification ends.
+     */
+    @Override
+    public void stopModification() {
+        super.stopModification();
+        modificationStartSiteLatLon = null;
     }
 
     /**
