@@ -125,13 +125,19 @@ public class RadarView extends MapView2D {
             etopo5 = Etopo5Loader.loadDefaultResource();
 
             // Countries from GeoJSON resource.
+            String resStr = resPrefix + MapResources.COUNTRIES_GEOJSON;
+            //remove any double slashes in the path
+            resStr = resStr.replaceAll("//", "/");
             List<CountryFeature> countries = GeoJsonCountryLoader
-                    .loadFromResourceStatic(resPrefix + MapResources.COUNTRIES_GEOJSON);
+                    .loadFromResourceStatic(resStr);
             setCountries(countries);
 
             // Cities — use GeoJSON so the population slider works.
-            setCities(GeoJsonCityLoader.loadFromResourceStatic(
-                    resPrefix + MapResources.CITIES_GEOJSON));
+           
+            resStr = resPrefix + MapResources.CITIES_GEOJSON;
+            //remove any double slashes in the path
+            resStr = resStr.replaceAll("//", "/");
+            setCities(GeoJsonCityLoader.loadFromResourceStatic(resStr));
 
             // addWestPanel uses a double-invokeLater to run after all
             // construction placement has settled.
