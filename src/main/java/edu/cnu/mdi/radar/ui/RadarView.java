@@ -2,14 +2,10 @@ package edu.cnu.mdi.radar.ui;
 
 import java.awt.Color;
 import java.awt.Component;
-import java.awt.Composite;
 import java.awt.Dimension;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
-import java.awt.Graphics2D;
 import java.awt.Point;
-import java.awt.Rectangle;
-import java.awt.Shape;
 import java.awt.event.ActionEvent;
 import java.awt.geom.Point2D;
 import java.io.IOException;
@@ -29,7 +25,6 @@ import javax.swing.JSlider;
 import javax.swing.border.Border;
 
 import edu.cnu.mdi.component.CommonBorder;
-import edu.cnu.mdi.container.IContainer;
 import edu.cnu.mdi.graphics.toolbar.BaseToolBar;
 import edu.cnu.mdi.graphics.toolbar.ToolBits;
 import edu.cnu.mdi.hover.HoverEvent;
@@ -80,17 +75,9 @@ import edu.cnu.mdi.view.ContainerFactory;
 @SuppressWarnings("serial")
 public class RadarView extends MapView2D {
 
-    /** Whether ETOPO5 shaded elevation/bathymetry should be rendered. */
-    private boolean showEtopo5 = false;
-    
     /** Whether hovering over radar items should show a tooltip. */
     private boolean enableHovering = true;
 
-    /**
-     * ETOPO5 elevation loader used both for terrain shading and radar line of
-     * sight calculations.
-     */
-    private Etopo5Loader etopo5;
 
     /**
      * Scale factor applied to the target-altitude thresholds used by
@@ -115,48 +102,46 @@ public class RadarView extends MapView2D {
         super(defaults());
         setBackground(Color.BLACK);
 
-        // Create a new layer for radar items and add it to the container.
-        radarLayer = new Layer(getIContainer(), "Radar Layer");
-
+ 
         try {
             String resPrefix = Environment.MDI_RESOURCE_PATH;
 
-            // ETOPO5 terrain demo — small enough to load from a single file.
-            etopo5 = Etopo5Loader.loadDefaultResource();
+            installEtopo5Layer(
+                    Etopo5Loader.loadDefaultResource(),
+                    false);
 
-            // Countries from GeoJSON resource.
-            String resStr = resPrefix + MapResources.COUNTRIES_GEOJSON;
-            //remove any double slashes in the path
-            resStr = resStr.replaceAll("//", "/");
-            List<CountryFeature> countries = GeoJsonCountryLoader
-                    .loadFromResourceStatic(resStr);
+            String resStr =
+                    (resPrefix + MapResources.COUNTRIES_GEOJSON)
+                            .replaceAll("//", "/");
+
+            List<CountryFeature> countries =
+                    GeoJsonCountryLoader
+                            .loadFromResourceStatic(resStr);
+
             setCountries(countries);
 
-            // Cities — use GeoJSON so the population slider works.
-           
-            resStr = resPrefix + MapResources.CITIES_GEOJSON;
-            //remove any double slashes in the path
-            resStr = resStr.replaceAll("//", "/");
-            setCities(GeoJsonCityLoader.loadFromResourceStatic(resStr));
+            resStr =
+                    (resPrefix + MapResources.CITIES_GEOJSON)
+                            .replaceAll("//", "/");
 
-            // addWestPanel uses a double-invokeLater to run after all
-            // construction placement has settled.
+            setCities(
+                    GeoJsonCityLoader
+                            .loadFromResourceStatic(resStr));
+
             addWestPanel(createWestPalettePanel());
 
         } catch (IOException e) {
             e.printStackTrace();
         }
 
-        // Add the Display ETOPO5 checkbox to the map control panel.
-        if (controlPanel != null) {
-            controlPanel.addCheckbox("Display ETOPO5", showEtopo5, this::handleEtopo5);
-            controlPanel.addCheckbox("Enable hovering", enableHovering, this::handleHovering);
-        }
-
         quickZoomMenu();
-        
+
         // no filtering of city labels
         getCityRenderer().setMaxLabelScalerank(-1);
+        
+        // Create a new layer for radar items and add it to the container.
+        radarLayer = new Layer(getIContainer(), "Radar Layer");
+
     }
 
     /**
@@ -326,7 +311,7 @@ public class RadarView extends MapView2D {
 
         return new RadarButtonPalette(4, buttons);
     }
-    
+
     /**
      * Tests whether a radar with the given parameters may be placed at a screen point.
      *
@@ -373,11 +358,7 @@ public class RadarView extends MapView2D {
      */
     public boolean tryPlaceRadar(RadarParameters parameters, Point pp) {
 
-        if (parameters == null || pp == null) {
-            return false;
-        }
-
-        if (!isRadarPlacementAllowed(parameters, pp, true)) {
+        if (parameters == null || pp == null || !isRadarPlacementAllowed(parameters, pp, true)) {
             return false;
         }
 
@@ -412,7 +393,7 @@ public class RadarView extends MapView2D {
                 "Radar Placement Warning",
                 JOptionPane.WARNING_MESSAGE);
     }
-    
+
 	/**
 	 * {@inheritDoc}
 	 *
@@ -424,7 +405,7 @@ public class RadarView extends MapView2D {
 	 */
 	@Override
 	public void hoverUpdate(HoverEvent he) {
-		
+
 		// If hovering is disabled, do nothing.
 		if (!enableHovering) {
 			return;
@@ -432,34 +413,34 @@ public class RadarView extends MapView2D {
 
 		Point pp = he.getLocation();
 		HoverInfoWindow win = container.getHoverWindow();
-			
+
 		if ((win == null) || (pp == null)) {
 			return;
 		}
-		
+
 		List<RadarItem> radars = getAllRadars();
 		if (radars == null || radars.isEmpty()) {
 			return;
 		}
-		
+
 		// Check if the hover point is over any radar item.
 		for (RadarItem radar : radars) {
 			if (radar.contains(container, pp)) {
 				RadarParameters params = radar.getParameters();
 				String[] strArray = params.toStringArray();
-				
+
 				StringBuilder sb = new StringBuilder();
 				for (String str : strArray) {
 					sb.append(str).append("\n");
 				}
-				
+
 				sb.append(String.format(
                         "site Lat/Lon %.4f, %.4f\n",
                         radar.getSiteLatitudeDeg(),
                         radar.getSiteLongitudeDeg()));
-				
+
 				sb.append(String.format("boresight azimuth %.1f°", radar.getAzimuth()));
-				
+
 				win.showMessage(he, sb.toString());
 				return;
 			}
@@ -467,39 +448,7 @@ public class RadarView extends MapView2D {
 	}
 
 
-    /**
-     * Returns interpolated ETOPO5 elevation at a geographic point.
-     *
-     * @param lat latitude in decimal degrees
-     * @param lon longitude in decimal degrees
-     * @return elevation in metres, or {@link Double#NaN} if ETOPO5 is unavailable
-     */
-    @Override
-    public double getElevation(double lat, double lon) {
-        if (etopo5 == null) {
-            return Double.NaN;
-        }
-        return etopo5.getInterpolatedElevationMeters(lat, lon);
-    }
 
-    /**
-     * Extension point called after country polygons are drawn.
-     *
-     * <p>
-     * When enabled, the ETOPO5 terrain/bathymetry layer is drawn at this point
-     * so it appears above the base country fill but below normal item overlays.
-     * </p>
-     *
-     * @param g         graphics context
-     * @param container rendering container
-     */
-    @Override
-    protected void afterCountryDraw(Graphics2D g, IContainer container) {
-        if (showEtopo5) {
-            drawEtopo5(g, container);
-        }
-    }
-    
     /**
      * Get all the radar items.
      * Assumes all radars are on the radarLayer.
@@ -515,116 +464,11 @@ public class RadarView extends MapView2D {
     	return radars;
     }
 
-    /**
-     * Draws ETOPO5 terrain and bathymetry over the visible part of the map.
-     *
-     * <p>
-     * The loop is intentionally restricted to the intersection of the projection
-     * clip, component bounds, and current graphics clip. Projection clip bounds can
-     * become very large when zoomed in, so iterating over the raw map-clip bounds
-     * would waste time checking many offscreen pixels.
-     * </p>
-     *
-     * @param g         graphics context
-     * @param container rendering container
-     */
-    private void drawEtopo5(Graphics2D g, IContainer container) {
-        if (etopo5 == null || container == null) {
-            return;
-        }
 
-        Shape mapClip = getProjection().createClipShape(container);
-        if (mapClip == null) {
-            return;
-        }
 
-        Shape oldClip = g.getClip();
-        Composite oldComposite = g.getComposite();
-        Color oldColor = g.getColor();
-
-        try {
-            g.clip(mapClip);
-
-            Rectangle visible = container.getComponent().getBounds();
-            visible.x = 0;
-            visible.y = 0;
-
-            Rectangle drawBounds = mapClip.getBounds().intersection(visible);
-
-            Rectangle graphicsClip = g.getClipBounds();
-            if (graphicsClip != null) {
-                drawBounds = drawBounds.intersection(graphicsClip);
-            }
-
-            if (drawBounds.isEmpty()) {
-                return;
-            }
-
-            final int step = 2;
-
-            Point screen = new Point();
-            Point2D.Double world = new Point2D.Double();
-            Point2D.Double latLon = new Point2D.Double();
-
-            int xMax = drawBounds.x + drawBounds.width;
-            int yMax = drawBounds.y + drawBounds.height;
-
-            for (int y = drawBounds.y; y < yMax; y += step) {
-                for (int x = drawBounds.x; x < xMax; x += step) {
-                    screen.setLocation(x + step / 2, y + step / 2);
-
-                    if (!mapClip.contains(screen)) {
-                        continue;
-                    }
-
-                    container.localToWorld(screen, world);
-                    getProjection().latLonFromXY(latLon, world);
-
-                    if (!Double.isFinite(latLon.x) || !Double.isFinite(latLon.y)) {
-                        continue;
-                    }
-
-                    if (!getProjection().isPointVisible(latLon)) {
-                        continue;
-                    }
-
-                    double lonDeg = Math.toDegrees(latLon.x);
-                    double latDeg = Math.toDegrees(latLon.y);
-
-                    double elevation = etopo5.getInterpolatedElevationMeters(latDeg, lonDeg);
-                    if (Double.isNaN(elevation)) {
-                        continue;
-                    }
-
-                    g.setColor(etopo5Color(elevation));
-                    g.fillRect(x, y, step, step);
-                }
-            }
-        } finally {
-            g.setClip(oldClip);
-            g.setComposite(oldComposite);
-            g.setColor(oldColor);
-        }
-    }
-    
     @Override
     public AbstractViewInfo getViewInfo() {
         return new RadarViewInfo(this);
-    }
-
-
-    /**
-     * Returns the terrain/bathymetry color for an ETOPO5 elevation.
-     *
-     * @param elevationMeters elevation in metres
-     * @return display color
-     */
-    private static Color etopo5Color(double elevationMeters) {
-        if (elevationMeters < 0.0) {
-            return waterColor(elevationMeters);
-        }
-
-        return landColor(elevationMeters);
     }
 
     /**
@@ -635,104 +479,6 @@ public class RadarView extends MapView2D {
      */
     public double getTargetAltitudeScale() {
         return targetAltitudeScale;
-    }
-
- 
-    /**
-     * Returns a bathymetry color for negative ETOPO5 elevations.
-     *
-     * @param elevationMeters elevation in metres; expected to be negative
-     * @return water color
-     */
-    private static Color waterColor(double elevationMeters) {
-        double z = clamp(elevationMeters, -11000.0, 0.0);
-
-        if (z < -6000.0) {
-            return interpolate(
-                    new Color(5, 20, 70),
-                    new Color(15, 60, 130),
-                    (z + 11000.0) / 5000.0);
-        }
-
-        if (z < -3000.0) {
-            return interpolate(
-                    new Color(15, 60, 130),
-                    new Color(35, 105, 175),
-                    (z + 6000.0) / 3000.0);
-        }
-
-        if (z < -1000.0) {
-            return interpolate(
-                    new Color(35, 105, 175),
-                    new Color(90, 155, 205),
-                    (z + 3000.0) / 2000.0);
-        }
-
-        return interpolate(
-                new Color(90, 155, 205),
-                new Color(185, 220, 240),
-                (z + 1000.0) / 1000.0);
-    }
-
-    /**
-     * Returns a terrain color for non-negative ETOPO5 elevations.
-     *
-     * @param elevationMeters elevation in metres; expected to be non-negative
-     * @return land color
-     */
-    private static Color landColor(double elevationMeters) {
-        double z = clamp(elevationMeters, 0.0, 9000.0);
-
-        if (z < 500.0) {
-            return interpolate(
-                    new Color(80, 150, 80),
-                    new Color(150, 190, 100),
-                    z / 500.0);
-        }
-
-        if (z < 1500.0) {
-            return interpolate(
-                    new Color(150, 190, 100),
-                    new Color(210, 185, 120),
-                    (z - 500.0) / 1000.0);
-        }
-
-        if (z < 3000.0) {
-            return interpolate(
-                    new Color(210, 185, 120),
-                    new Color(170, 120, 80),
-                    (z - 1500.0) / 1500.0);
-        }
-
-        if (z < 6000.0) {
-            return interpolate(
-                    new Color(170, 120, 80),
-                    new Color(190, 170, 150),
-                    (z - 3000.0) / 3000.0);
-        }
-
-        return interpolate(
-                new Color(190, 170, 150),
-                new Color(245, 245, 245),
-                (z - 6000.0) / 3000.0);
-    }
-
-    /**
-     * Linearly interpolates between two colors.
-     *
-     * @param c0 start color
-     * @param c1 end color
-     * @param t  interpolation parameter
-     * @return interpolated color
-     */
-    private static Color interpolate(Color c0, Color c1, double t) {
-        t = clamp(t, 0.0, 1.0);
-
-        int r = (int) Math.round(c0.getRed() + t * (c1.getRed() - c0.getRed()));
-        int g = (int) Math.round(c0.getGreen() + t * (c1.getGreen() - c0.getGreen()));
-        int b = (int) Math.round(c0.getBlue() + t * (c1.getBlue() - c0.getBlue()));
-
-        return new Color(r, g, b);
     }
 
     /**
@@ -746,29 +492,6 @@ public class RadarView extends MapView2D {
     private static double clamp(double value, double min, double max) {
         return Math.max(min, Math.min(max, value));
     }
-
-    /**
-     * Handles the ETOPO5 checkbox action.
-     *
-     * @param e checkbox action event
-     */
-    private void handleEtopo5(ActionEvent e) {
-        JCheckBox checkbox = (JCheckBox) e.getSource();
-        showEtopo5 = checkbox.isSelected();
-        refresh();
-    }
-    
-    /**
-     * Handles the hovering checkbox action.
-     *
-     * @param e checkbox action event
-     */
-    private void handleHovering(ActionEvent e) {
-        JCheckBox checkbox = (JCheckBox) e.getSource();
-        enableHovering = checkbox.isSelected();
-        refresh();
-    }
-
 
     /**
      * Returns the default property list used to construct this view.
@@ -855,16 +578,16 @@ public class RadarView extends MapView2D {
             int y = 3;
 
             int count = Math.min(base.length, colors.length);
-            
+
           //get the biggest width needed
             int maxWid = SWATCH_W;
             for (int i = 0; i < count; i++) {
                 String label = altitudeLabel(base[i] * scale);
-                maxWid = Math.max(maxWid, fm.stringWidth(label));          	
+                maxWid = Math.max(maxWid, fm.stringWidth(label));
             }
             maxWid += GAP;
-            
-            
+
+
             for (int i = 0; i < count; i++) {
                 g.setColor(colors[i]);
                 g.fillRect(x, y, SWATCH_W, SWATCH_H);
