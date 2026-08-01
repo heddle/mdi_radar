@@ -6,7 +6,6 @@ import java.awt.Dimension;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Point;
-import java.awt.event.ActionEvent;
 import java.awt.geom.Point2D;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -15,7 +14,6 @@ import java.util.List;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
-import javax.swing.JCheckBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
@@ -155,7 +153,6 @@ public class RadarView extends MapView2D {
      */
     private void quickZoomMenu() {
         ViewPopupMenu menu = getViewPopupMenu();
-        menu.addSeparator();
 
         JMenuItem wholeWorldZoom = new JMenuItem("Global");
         wholeWorldZoom.addActionListener(e -> {
@@ -175,9 +172,9 @@ public class RadarView extends MapView2D {
             container.zoomLatLon(16.16, 43.0, 37.76, 60.57);
         });
 
-        menu.add(wholeWorldZoom);
-        menu.add(koreaZoom);
-        menu.add(iranTheaterZoom);
+        menu.addQuickZoom(wholeWorldZoom);
+        menu.addQuickZoom(koreaZoom);
+        menu.addQuickZoom(iranTheaterZoom);
     }
 
     /**
@@ -504,6 +501,7 @@ public class RadarView extends MapView2D {
         return new Object[] {
                 PropertyUtils.TITLE, "Radar View",
                 PropertyUtils.FRACTION, 0.8,
+                PropertyUtils.FEEDBACKFONTSIZE, 12,
                 PropertyUtils.ASPECT, 1.2,
                 PropertyUtils.CONTAINERFACTORY, mapContainerFactory,
                 PropertyUtils.TOOLBARBITS, ToolBits.MAPTOOLS | ToolBits.ZOOMTOOLS,
