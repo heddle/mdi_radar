@@ -84,7 +84,7 @@ public class RadarViewInfo extends AbstractViewInfo {
     @Override
     public List<String> getUsageBullets() {
         return List.of(
-            "Use the projection selector to switch among supported map projections.",
+            "Use the projection selector to switch among MDI's built-in projections and the radar application's custom Plate Carrée projection.",
             "Use the map controls to show or hide city names, graticules, graticule labels, ETOPO5 terrain, and hover feedback.",
             "Use the view popup menu to jump quickly to the Global, Korean Theater, or USCENTCOM AOR views.",
             "Select a radar preset in the Radar Presets palette, then click the map to place it.",
@@ -124,7 +124,7 @@ public class RadarViewInfo extends AbstractViewInfo {
     @Override
     public String getTechnicalNotes() {
         return String.format(
-            "Radar View extends MapView2D and uses MapContainer for projection-aware "
+            "Radar View extends MapView2D, supplies its own Plate Carrée IMapProjection, and uses MapContainer for projection-aware "
           + "drawing and interaction. Countries loaded: %d. Cities loaded: %d. "
           + "ETOPO5 terrain and bathymetry are loaded from the MDI classpath resources "
           + "and are used both for shaded terrain display and radar line-of-sight "

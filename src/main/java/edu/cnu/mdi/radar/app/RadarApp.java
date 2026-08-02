@@ -33,7 +33,7 @@ public class RadarApp extends BaseMDIApplication {
 		ViewManager.getInstance().getViewMenu().addSeparator();
 		logView.setVisible(false);
 		
-		RadarView radarView = new RadarView();
+		new RadarView();
 	}
 	
 	@Override

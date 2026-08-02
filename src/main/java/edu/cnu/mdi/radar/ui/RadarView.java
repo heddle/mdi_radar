@@ -38,6 +38,7 @@ import edu.cnu.mdi.mapping.loader.GeoJsonCountryLoader;
 import edu.cnu.mdi.mapping.loader.GeoJsonCountryLoader.CountryFeature;
 import edu.cnu.mdi.mapping.milsym.NatoIconPicker;
 import edu.cnu.mdi.radar.item.RadarItem;
+import edu.cnu.mdi.radar.projection.PlateCarreeProjection;
 import edu.cnu.mdi.radar.radar.RadarBasing;
 import edu.cnu.mdi.radar.radar.RadarParameters;
 import edu.cnu.mdi.ui.fonts.Fonts;
@@ -98,6 +99,8 @@ public class RadarView extends MapView2D {
      */
     public RadarView() {
         super(defaults());
+        getMapControlPanel().addProjection(
+                "Plate Carrée", PlateCarreeProjection::new);
         setBackground(Color.BLACK);
 
  
@@ -132,7 +135,8 @@ public class RadarView extends MapView2D {
             e.printStackTrace();
         }
 
-        quickZoomMenu();
+        // Add quick zoom entries to the view popup menu.
+         quickZoomMenu();
 
         // no filtering of city labels
         getCityRenderer().setMaxLabelScalerank(-1);
