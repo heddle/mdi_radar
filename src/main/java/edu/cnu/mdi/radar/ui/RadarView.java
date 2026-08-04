@@ -15,6 +15,7 @@ import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JComponent;
+import javax.swing.JCheckBox;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
@@ -74,10 +75,6 @@ import edu.cnu.mdi.view.ContainerFactory;
 @SuppressWarnings("serial")
 public class RadarView extends MapView2D {
 
-    /** Whether hovering over radar items should show a tooltip. */
-    private boolean enableHovering = true;
-
-
     /**
      * Scale factor applied to the target-altitude thresholds used by
      * {@link RadarItem} colored LOS rays.
@@ -101,6 +98,12 @@ public class RadarView extends MapView2D {
         super(defaults());
         getMapControlPanel().addProjection(
                 "Plate Carrée", PlateCarreeProjection::new);
+        JCheckBox useHovering = new JCheckBox(
+                "Show hover feedback", isHoveringEnabled());
+        useHovering.setFont(Fonts.defaultFont);
+        useHovering.addActionListener(event ->
+                setHoveringEnabled(useHovering.isSelected()));
+        getMapControlPanel().addControl(useHovering);
         setBackground(Color.BLACK);
 
  
@@ -407,8 +410,7 @@ public class RadarView extends MapView2D {
 	@Override
 	public void hoverUpdate(HoverEvent he) {
 
-		// If hovering is disabled, do nothing.
-		if (!enableHovering) {
+		if (!isHoveringEnabled()) {
 			return;
 		}
 
@@ -420,13 +422,12 @@ public class RadarView extends MapView2D {
 		}
 
 		List<RadarItem> radars = getAllRadars();
-		if (radars == null || radars.isEmpty()) {
-			return;
-		}
-
-		// Check if the hover point is over any radar item.
-		for (RadarItem radar : radars) {
-			if (radar.contains(container, pp)) {
+		if (radars != null) {
+			// Radar-specific information takes priority over general map feedback.
+			for (RadarItem radar : radars) {
+				if (!radar.contains(container, pp)) {
+					continue;
+				}
 				RadarParameters params = radar.getParameters();
 				String[] strArray = params.toStringArray();
 
@@ -446,6 +447,9 @@ public class RadarView extends MapView2D {
 				return;
 			}
 		}
+
+		// No radar was hit: retain MapView2D's country and shapefile hover.
+		super.hoverUpdate(he);
 	}
 
 
