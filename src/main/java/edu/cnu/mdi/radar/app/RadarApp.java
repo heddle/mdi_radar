@@ -41,6 +41,14 @@ public class RadarApp extends BaseMDIApplication {
 		return "Radar Visualization Demo";
 	}
 
+	// This is a single-window demo tool, not an app embedding MDI inside
+	// something larger, so the native close button should behave the same
+	// as a Quit action: both should actually end the process.
+	@Override
+	protected boolean exitOnClose() {
+		return true;
+	}
+
 	/** Main entry point. */
 	public static void main(String[] args) {
 		EventQueue.invokeLater(() -> {

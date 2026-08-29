@@ -42,6 +42,7 @@ import edu.cnu.mdi.radar.item.RadarItem;
 import edu.cnu.mdi.radar.projection.PlateCarreeProjection;
 import edu.cnu.mdi.radar.radar.RadarBasing;
 import edu.cnu.mdi.radar.radar.RadarParameters;
+import edu.cnu.mdi.swing.SwingSizingUtils;
 import edu.cnu.mdi.ui.fonts.Fonts;
 import edu.cnu.mdi.ui.menu.ViewPopupMenu;
 import edu.cnu.mdi.util.Environment;
@@ -84,6 +85,9 @@ public class RadarView extends MapView2D {
     /** The layer on which radar items are created. */
     private Layer radarLayer;
 
+    /** The ETOPO5 terrain/bathymetry layer, toggled by the map controls. */
+    private Layer etopo5Layer;
+
     /**
      * Creates the radar view.
      *
@@ -110,9 +114,18 @@ public class RadarView extends MapView2D {
         try {
             String resPrefix = Environment.MDI_RESOURCE_PATH;
 
-            installEtopo5Layer(
+            etopo5Layer = installEtopo5Layer(
                     Etopo5Loader.loadDefaultResource(),
                     false);
+
+            JCheckBox showEtopo5 = new JCheckBox(
+                    "Display ETOPO5", etopo5Layer.isVisible());
+            showEtopo5.setFont(Fonts.defaultFont);
+            showEtopo5.addActionListener(event -> {
+                etopo5Layer.setVisible(showEtopo5.isSelected());
+                refresh();
+            });
+            getMapControlPanel().addControl(showEtopo5);
 
             String resStr =
                     (resPrefix + MapResources.COUNTRIES_GEOJSON)
@@ -545,6 +558,11 @@ public class RadarView extends MapView2D {
         /** Scale factor applied to base altitude thresholds. */
         private double scale = 1.0;
 
+        /** Creates the legend, using the same tiny font as its painted labels. */
+        TargetAltitudeLegend() {
+            setFont(Fonts.tinyFont);
+        }
+
         /**
          * Sets the altitude scale used by the legend.
          *
@@ -558,11 +576,36 @@ public class RadarView extends MapView2D {
         /**
          * Returns the preferred size for the compact legend.
          *
+         * <p>
+         * The size is derived from the actual rendered label widths and font
+         * height via {@link SwingSizingUtils}, using the same font and layout
+         * math as {@link #paintComponent(Graphics)}. This keeps the legend
+         * correctly sized instead of drifting out of sync with a fixed guess
+         * if the font, swatch count, or altitude scale changes.
+         * </p>
+         *
          * @return preferred legend size
          */
         @Override
         public Dimension getPreferredSize() {
-            return new Dimension(205, 34);
+            double[] base = RadarItem.getBaseTargetAltitudesM();
+
+            int maxWid = SWATCH_W;
+            for (double threshold : base) {
+                maxWid = Math.max(maxWid,
+                        SwingSizingUtils.textWidth(this, altitudeLabel(threshold * scale), 0));
+            }
+            if (base.length > 0) {
+                String highestLabel = ">" + altitudeLabel(base[base.length - 1] * scale);
+                maxWid = Math.max(maxWid, SwingSizingUtils.textWidth(this, highestLabel, 0));
+            }
+            maxWid += GAP;
+
+            int entryCount = base.length + (base.length > 0 ? 1 : 0);
+            int width = 4 + Math.max(1, entryCount) * maxWid;
+            int height = 3 + SWATCH_H + ROW_GAP + SwingSizingUtils.fontHeight(this, null, 0);
+
+            return new Dimension(width, height);
         }
 
         /**

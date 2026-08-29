@@ -1088,15 +1088,6 @@ public class RadarItem extends AItem {
     // ---------------------------------------------------------------------
 
     /**
-     * Returns the radar parameters represented by this item.
-     *
-     * @return radar parameters
-     */
-    public RadarParameters getRadarParameters() {
-        return parameters;
-    }
-
-    /**
      * Returns the radar site location.
      *
      * @return copy of the site location in radians, {@code x=lon}, {@code y=lat}
